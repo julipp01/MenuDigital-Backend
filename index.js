@@ -10,40 +10,28 @@ const app = express();
 const server = createServer(app);
 const PORT = process.env.PORT || 5000;
 const NODE_ENV = process.env.NODE_ENV || "development";
-const BACKEND_URL = process.env.BACKEND_URL || (NODE_ENV === "production" ? "https://menudigital-backend-production.up.railway.app" : "http://localhost:5000");
-const SOCKET_URL = process.env.SOCKET_URL || (NODE_ENV === "production" ? "wss://menudigital-backend-production.up.railway.app" : "ws://localhost:5000");
+const BACKEND_URL = process.env.BACKEND_URL || "https://menudigital-backend-production.up.railway.app";
+const SOCKET_URL = process.env.SOCKET_URL || "wss://menudigital-backend-production.up.railway.app";
 
-// Inicializar WebSocket en ambos entornos
-initializeSocket(server);
+// Inicializar WebSocket\initializeSocket(server);
 
 // Configuración de CORS
 const allowedOrigins = NODE_ENV === "production"
-  ? ["https://menu-digital-bdhg.vercel.app", "https://tu-frontend-url.com"] // Ajusta según tu frontend en producción
-  : ["http://localhost:5173", "https://menu-digital-bdhg.vercel.app", "menu-digital-bdhg-py2kw9tvp-julipp01s-projects.vercel.app"];
+  ? ["https://menu-digital-bdhg.vercel.app", "https://tu-frontend-url.com"]
+  : ["http://localhost:5173", "https://menu-digital-bdhg.vercel.app"];
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        console.error(`[CORS] Bloqueado: ${origin}`);
-        callback(new Error("No permitido por CORS"));
-      }
-    },
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-  })
-);
+app.use(cors({
+  origin: allowedOrigins,
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+}));
 
 // Middleware
 app.use(express.json({ limit: "10mb" }));
-
-// Servir archivos estáticos
-app.use("/uploads", express.static(path.join(__dirname, "uploads"), { maxAge: "1d" }));
-app.use("/models", express.static(path.join(__dirname, "models"), { maxAge: "1d" }));
-app.use("/thumbnails", express.static(path.join(__dirname, "thumbnails"), { maxAge: "1d" }));
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/models", express.static(path.join(__dirname, "models")));
+app.use("/thumbnails", express.static(path.join(__dirname, "thumbnails")));
 
 // Inicialización de la base de datos
 const initializeDatabase = async () => {
@@ -79,8 +67,7 @@ app.get("/", (req, res) => {
   res.status(200).send(`API funcionando 🚀 - Entorno: ${NODE_ENV}`);
 });
 
-// Manejo de errores
-app.use((err, req, res, next) => {
+// Manejo de errores\app.use((err, req, res, next) => {
   const status = err.status || 500;
   console.error("Error en el servidor:", {
     message: err.message,
@@ -113,4 +100,5 @@ const startServer = async () => {
 };
 
 startServer();
+
 
