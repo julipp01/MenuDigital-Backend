@@ -6,6 +6,7 @@ const pool = mysql.createPool({
     user: process.env.DB_USER,
     password: process.env.DB_PASS,
     database: process.env.DB_NAME,
+    port: process.env.DB_PORT || 3306, // Asegurar el puerto correcto
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0
@@ -14,12 +15,13 @@ const pool = mysql.createPool({
 // Verificar la conexión
 pool.getConnection()
   .then(conn => {
-    console.log('Conectado a MySQL');
+    console.log('✅ Conectado a MySQL en Railway');
     conn.release();
   })
   .catch(err => {
-    console.error('Error conectando a MySQL:', err);
+    console.error('❌ Error conectando a MySQL:', err);
   });
 
 module.exports = pool;
+
 
