@@ -9,16 +9,17 @@ const { initializeSocket } = require("./src/config/socket");
 const app = express();
 const server = createServer(app);
 const PORT = process.env.PORT || 5000;
+const NODE_ENV = process.env.NODE_ENV || "development";
+const BACKEND_URL = process.env.BACKEND_URL || (NODE_ENV === "production" ? "https://menudigital-backend-production.up.railway.app" : "http://localhost:5000");
+const SOCKET_URL = process.env.SOCKET_URL || (NODE_ENV === "production" ? "wss://menudigital-backend-production.up.railway.app" : "ws://localhost:5000");
 
-// Inicializar WebSocket
+// Inicializar WebSocket en ambos entornos
 initializeSocket(server);
 
-// ✅ Corrección de CORS: Agregar dominios permitidos
-const allowedOrigins = [
-  "http://localhost:5173",
-  "https://menu-digital-bdhg.vercel.app", // ✅ Asegúrate de usar la URL de tu frontend en Vercel
-  "menu-digital-bdhg-py2kw9tvp-julipp01s-projects.vercel.app" // ✅ Si tienes un dominio personalizado agrégalo aquí
-];
+// Configuración de CORS
+const allowedOrigins = NODE_ENV === "production"
+  ? ["https://menu-digital-bdhg.vercel.app", "https://tu-frontend-url.com"] // Ajusta según tu frontend en producción
+  : ["http://localhost:5173", "https://menu-digital-bdhg.vercel.app", "menu-digital-bdhg-py2kw9tvp-julipp01s-projects.vercel.app"];
 
 app.use(
   cors({
@@ -52,7 +53,7 @@ const initializeDatabase = async () => {
     try {
       const connection = await pool.getConnection();
       connection.release();
-      console.log("✅ Conectado a MySQL en Railway");
+      console.log(`✅ Conectado a MySQL en ${process.env.DB_HOST}:${process.env.DB_PORT}`);
       return;
     } catch (err) {
       console.error(`❌ Intento ${attempts}/${maxRetries} - Error de conexión a MySQL:`, err.message);
@@ -75,7 +76,7 @@ app.use("/api/templates", require("./src/routes/templates"));
 
 // Ruta raíz
 app.get("/", (req, res) => {
-  res.status(200).send("API funcionando 🚀");
+  res.status(200).send(`API funcionando 🚀 - Entorno: ${NODE_ENV}`);
 });
 
 // Manejo de errores
@@ -96,20 +97,20 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Iniciar el servidor en 0.0.0.0
+// Iniciar el servidor
 const startServer = async () => {
   try {
     await initializeDatabase();
     server.listen(PORT, "0.0.0.0", () => {
-      console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+      console.log(`🚀 Servidor corriendo en ${BACKEND_URL}:${PORT}`);
+      console.log(`🚀 WebSocket disponible en ${SOCKET_URL}`);
       console.log(`CORS habilitado para: ${allowedOrigins.join(", ")}`);
     });
-  } catch (err) {
-    console.error("❌ Error al iniciar el servidor:", err.message);
+  } catch (error) {
+    console.error("❌ Error al iniciar el servidor:", error.message);
     process.exit(1);
   }
 };
 
 startServer();
-
 
