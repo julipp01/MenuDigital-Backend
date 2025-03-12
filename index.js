@@ -16,8 +16,8 @@ initializeSocket(server);
 // ✅ Corrección de CORS: Agregar dominios permitidos
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://menu-digital-ixzy-g4k5cspt0-julipp01s-projects.vercel.app", // ✅ Asegúrate de usar la URL de tu frontend en Vercel
-  "https://menu-digital.vercel.app" // ✅ Si tienes un dominio personalizado agrégalo aquí
+  "https://menu-digital-bdhg.vercel.app", // ✅ Asegúrate de usar la URL de tu frontend en Vercel
+  "menu-digital-bdhg-py2kw9tvp-julipp01s-projects.vercel.app" // ✅ Si tienes un dominio personalizado agrégalo aquí
 ];
 
 app.use(
