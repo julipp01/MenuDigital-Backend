@@ -16,7 +16,8 @@ initializeSocket(server);
 // Configuración de CORS
 const allowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(",")
-  : ["http://localhost:5173", "http://192.168.18.22:5173"];
+  : ["http://localhost:5173"];
+  
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -48,7 +49,7 @@ const initializeDatabase = async () => {
     try {
       const connection = await pool.getConnection();
       connection.release();
-      console.log("✅ Conectado a MySQL");
+      console.log("✅ Conectado a MySQL en Railway");
       return;
     } catch (err) {
       console.error(`❌ Intento ${attempts}/${maxRetries} - Error de conexión a MySQL:`, err.message);
@@ -92,12 +93,12 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Iniciar el servidor
+// Iniciar el servidor en 0.0.0.0
 const startServer = async () => {
   try {
     await initializeDatabase();
-    server.listen(PORT, "192.168.18.22", () => {
-      console.log(`🚀 Servidor corriendo en http://192.168.18.22:${PORT}`);
+    server.listen(PORT, "0.0.0.0", () => {
+      console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
       console.log(`CORS habilitado para: ${allowedOrigins.join(", ")}`);
     });
   } catch (err) {
@@ -107,4 +108,5 @@ const startServer = async () => {
 };
 
 startServer();
+
 
