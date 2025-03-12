@@ -1,5 +1,10 @@
-const mysql = require('mysql2/promise');
 require('dotenv').config();
+const mysql = require('mysql2/promise');
+
+if (!process.env.DATABASE_URL) {
+  console.error("❌ ERROR: DATABASE_URL no está definido en .env");
+  process.exit(1);
+}
 
 const pool = mysql.createPool(process.env.DATABASE_URL);
 

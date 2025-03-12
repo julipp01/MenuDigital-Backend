@@ -13,17 +13,20 @@ const PORT = process.env.PORT || 5000;
 // Inicializar WebSocket
 initializeSocket(server);
 
-// Configuración de CORS
-const allowedOrigins = process.env.FRONTEND_URL
-  ? process.env.FRONTEND_URL.split(",")
-  : ["http://localhost:5173"];
-  
+// ✅ Corrección de CORS: Agregar dominios permitidos
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://menu-digital-ixzy-g4k5cspt0-julipp01s-projects.vercel.app", // ✅ Asegúrate de usar la URL de tu frontend en Vercel
+  "https://menu-digital.vercel.app" // ✅ Si tienes un dominio personalizado agrégalo aquí
+];
+
 app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
+        console.error(`[CORS] Bloqueado: ${origin}`);
         callback(new Error("No permitido por CORS"));
       }
     },
