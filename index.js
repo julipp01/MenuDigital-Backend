@@ -55,7 +55,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Configuración de Multer (almacenamiento temporal en memoria)
 const upload = multer({
-  storage: multer.memoryStorage(), // Guardar en memoria antes de subir a Cloudinary
+  storage: multer.memoryStorage(),
   fileFilter: (req, file, cb) => {
     const allowedTypes = ["image/jpeg", "image/png", "model/gltf-binary"];
     if (allowedTypes.includes(file.mimetype)) {
@@ -96,7 +96,7 @@ app.use("/api/dashboard", require("./src/routes/dashboard"));
 app.use("/api/mesas", require("./src/routes/mesas"));
 app.use("/api/templates", require("./src/routes/templates"));
 
-// Ruta para subir logo y guardarlo en Cloudinary
+// Ruta para subir logo a Cloudinary
 app.post("/api/restaurantes/:id/upload-logo", upload.single("logo"), async (req, res) => {
   if (!req.file) {
     console.error("[POST Upload Logo] No se proporcionó un archivo válido");
