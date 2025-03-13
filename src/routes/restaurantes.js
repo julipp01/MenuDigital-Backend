@@ -59,7 +59,7 @@ const upload = multer({
   },
 }).single("logo");
 
-// GET: Obtener datos de un restaurante (protegido)
+// ✅ GET: Obtener datos de un restaurante (protegido)
 router.get("/:restaurantId", authMiddleware, async (req, res) => {
   const restaurantId = parseInt(req.params.restaurantId, 10);
   if (isNaN(restaurantId)) {
@@ -72,7 +72,7 @@ router.get("/:restaurantId", authMiddleware, async (req, res) => {
       `SELECT r.*, p.name AS plan_name, p.items_limit, p.images_limit, p.start_date, p.end_date 
        FROM restaurants r 
        LEFT JOIN subscription_plans p ON r.plan_id = p.id 
-       WHERE r.id = ? AND r.user_id = ?`,
+       WHERE r.id = ? AND r.owner_id = ?`,
       [restaurantId, req.user.id]
     );
 
@@ -89,7 +89,7 @@ router.get("/:restaurantId", authMiddleware, async (req, res) => {
   }
 });
 
-// POST: Subir logo (protegido)
+// ✅ POST: Subir logo (protegido)
 router.post("/:restaurantId/upload-logo", authMiddleware, (req, res) => {
   const restaurantId = parseInt(req.params.restaurantId, 10);
   if (isNaN(restaurantId)) {
@@ -111,7 +111,7 @@ router.post("/:restaurantId/upload-logo", authMiddleware, (req, res) => {
     console.log("[POST Upload Logo] Logo subido:", logoUrl);
     try {
       const [result] = await pool.query(
-        "UPDATE restaurants SET logo_url = ? WHERE id = ? AND user_id = ?",
+        "UPDATE restaurants SET logo_url = ? WHERE id = ? AND owner_id = ?",
         [logoUrl, restaurantId, req.user.id]
       );
 
@@ -129,7 +129,7 @@ router.post("/:restaurantId/upload-logo", authMiddleware, (req, res) => {
   });
 });
 
-// PUT: Actualizar datos del restaurante (protegido)
+// ✅ PUT: Actualizar datos del restaurante (protegido)
 router.put("/:restaurantId", authMiddleware, async (req, res) => {
   const restaurantId = parseInt(req.params.restaurantId, 10);
   const { name, colors, logo, sections, plan_id } = req.body;
@@ -142,7 +142,7 @@ router.put("/:restaurantId", authMiddleware, async (req, res) => {
   console.log("[PUT Restaurante] Actualizando:", { restaurantId, name, colors, logo, sections, plan_id });
   try {
     const [result] = await pool.query(
-      "UPDATE restaurants SET name = ?, colors = ?, logo_url = ?, sections = ?, plan_id = ? WHERE id = ? AND user_id = ?",
+      "UPDATE restaurants SET name = ?, colors = ?, logo_url = ?, sections = ?, plan_id = ? WHERE id = ? AND owner_id = ?",
       [name || null, JSON.stringify(colors), logo || null, JSON.stringify(sections), plan_id || null, restaurantId, req.user.id]
     );
 
@@ -160,4 +160,5 @@ router.put("/:restaurantId", authMiddleware, async (req, res) => {
 });
 
 module.exports = router;
+
 
