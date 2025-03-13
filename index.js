@@ -2,7 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
-const fs = require("fs").promises; // Para verificar existencia de directorios
+const fs = require("fs").promises;
 const multer = require("multer");
 const pool = require("./src/config/db");
 const { createServer } = require("http");
@@ -47,10 +47,10 @@ app.use(
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// Configuración de Multer
+// Configuración de Multer con volumen persistente
 const storage = multer.diskStorage({
   destination: async (req, file, cb) => {
-    const uploadDir = path.join(__dirname, "uploads");
+    const uploadDir = "/app/uploads"; // Volumen persistente en Railway
     try {
       await fs.mkdir(uploadDir, { recursive: true });
     } catch (err) {
@@ -61,7 +61,7 @@ const storage = multer.diskStorage({
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
     const extension = path.extname(file.originalname);
-    cb(null, `${file.fieldname}-${uniqueSuffix}${extension}`);
+    cb(null, `${uniqueSuffix}${extension}`); // Nombres únicos con extensión original
   },
 });
 
@@ -76,18 +76,8 @@ const fileFilter = (req, file, cb) => {
 
 const upload = multer({ storage, fileFilter, limits: { fileSize: 10 * 1024 * 1024 } });
 
-// Verificar y configurar directorios estáticos
-const staticDirs = ["uploads", "models", "thumbnails"];
-staticDirs.forEach(async (dir) => {
-  const dirPath = path.join(__dirname, dir);
-  try {
-    await fs.access(dirPath);
-  } catch (err) {
-    console.warn(`[Static] Directorio ${dir} no existe, creándolo...`);
-    await fs.mkdir(dirPath, { recursive: true });
-  }
-  app.use(`/${dir}`, express.static(dirPath));
-});
+// Servir directorio estático
+app.use("/uploads", express.static("/app/uploads"));
 
 // Inicialización de la base de datos
 const initializeDatabase = async () => {
@@ -118,14 +108,29 @@ app.use("/api/dashboard", require("./src/routes/dashboard"));
 app.use("/api/mesas", require("./src/routes/mesas"));
 app.use("/api/templates", require("./src/routes/templates"));
 
-// Ruta para subir logo
-app.post("/api/restaurantes/:id/upload-logo", upload.single("logo"), (req, res) => {
+// Ruta para subir logo con actualización en base de datos
+app.post("/api/restaurantes/:id/upload-logo", upload.single("logo"), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: "No se proporcionó un archivo válido" });
   }
   const logoUrl = `/uploads/${req.file.filename}`;
-  console.log("[POST Upload Logo] Logo subido:", { restaurantId: req.params.id, logoUrl });
-  res.status(200).json({ message: "Logo subido con éxito", logoUrl });
+  const restaurantId = req.params.id;
+
+  try {
+    const [result] = await pool.query(
+      "UPDATE restaurants SET logo_url = ? WHERE id = ?",
+      [logoUrl, restaurantId]
+    );
+    if (result.affectedRows === 0) {
+      console.error(`[POST Upload Logo] No se encontró restaurante con id: ${restaurantId}`);
+      return res.status(404).json({ message: "Restaurante no encontrado" });
+    }
+    console.log("[POST Upload Logo] Logo subido y guardado:", { restaurantId, logoUrl });
+    res.status(200).json({ message: "Logo subido con éxito", logoUrl });
+  } catch (error) {
+    console.error("[POST Upload Logo] Error al guardar logo:", error.message);
+    res.status(500).json({ message: "Error al guardar el logo", details: error.message });
+  }
 });
 
 // Ruta para subir archivos de menú
