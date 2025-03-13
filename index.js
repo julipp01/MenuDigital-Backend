@@ -16,7 +16,7 @@ const SOCKET_URL = process.env.SOCKET_URL || "wss://menudigital-backend-producti
 // 🔹 Inicializar WebSocket
 initializeSocket(server);
 
-// 🔹 Configuración de CORS
+// 🔹 Configuración de CORS mejorada
 const allowedOrigins = NODE_ENV === "production"
   ? ["https://menu-digital-bdhg.vercel.app", "https://tu-frontend-url.com"]
   : ["http://localhost:5173", "https://menu-digital-bdhg.vercel.app"];
@@ -24,11 +24,10 @@ const allowedOrigins = NODE_ENV === "production"
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.error(`[CORS] Bloqueado: ${origin}`);
-      callback(new Error("No permitido por CORS"));
+      return callback(null, true);
     }
+    console.error(`[CORS] 🚫 Bloqueado: ${origin}`);
+    return callback(new Error("Acceso no permitido por CORS"));
   },
   methods: ["GET", "POST", "PUT", "DELETE"],
   allowedHeaders: ["Content-Type", "Authorization"],
@@ -75,12 +74,12 @@ app.get("/", (req, res) => {
   res.status(200).send(`API funcionando 🚀 - Entorno: ${NODE_ENV}`);
 });
 
-// 🔹 Manejo de errores
-app.use((error, req, res, next) => {
-  const status = error.status || 500;
+// 🔹 Middleware de manejo de errores mejorado
+app.use((err, req, res, next) => {
+  const status = err.status || 500;
   console.error("❌ Error en el servidor:", {
-    message: error.message,
-    stack: error.stack,
+    message: err.message,
+    stack: err.stack,
     path: req.path,
     method: req.method,
     timestamp: new Date().toISOString(),
@@ -88,7 +87,7 @@ app.use((error, req, res, next) => {
 
   res.status(status).json({
     error: {
-      message: error.message || "Error en el servidor",
+      message: err.message || "Error en el servidor",
       status,
     },
   });
