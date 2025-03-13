@@ -18,7 +18,11 @@ initializeSocket(server);
 
 // 🔹 Configuración de CORS mejorada
 const allowedOrigins = NODE_ENV === "production"
-  ? ["https://menu-digital-bdhg.vercel.app", "https://tu-frontend-url.com"]
+  ? [
+      "https://menu-digital-bdhg.vercel.app",
+      "https://menudigital-18byivk2a-julipp01s-projects.vercel.app", // ✅ Agregado
+      "https://tu-frontend-url.com"
+    ]
   : ["http://localhost:5173", "https://menu-digital-bdhg.vercel.app"];
 
 app.use(cors({
