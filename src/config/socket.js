@@ -1,85 +1,49 @@
-import { useEffect, useState, useRef } from "react";
+const { Server } = require("ws");
 
-const useSocket = (url = "wss://menudigital-backend-production.up.railway.app") => {
-  const [socket, setSocket] = useState(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const [menuUpdate, setMenuUpdate] = useState(null);
-  const reconnectAttempts = useRef(0);
-  const maxReconnectAttempts = 5;
-  const reconnectInterval = 5000;
-  const pingInterval = useRef(null);
+const initializeSocket = (server) => {
+  const wss = new Server({ server });
 
-  const connectWebSocket = () => {
-    if (reconnectAttempts.current >= maxReconnectAttempts) {
-      console.error(`❌ Máximo de intentos de reconexión alcanzado (${maxReconnectAttempts}).`);
-      return;
-    }
+  wss.on("connection", (socket) => {
+    console.log("✅ Cliente conectado al WebSocket");
 
-    console.log(`🔹 Conectando a WebSocket en: ${url}`);
-    const ws = new WebSocket(url);
-
-    ws.onopen = () => {
-      console.log(`✅ Conectado al servidor WebSocket: ${ws._socket?.remoteAddress || "ID no disponible"}`);
-      setIsConnected(true);
-      setSocket(ws);
-      reconnectAttempts.current = 0;
-
-      // Iniciar ping para mantener la conexión viva
-      pingInterval.current = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: "ping" }));
-          console.log("📡 Ping enviado al servidor");
-        }
-      }, 30000); // Enviar ping cada 30 segundos
-    };
-
-    ws.onmessage = (event) => {
+    socket.on("message", (data) => {
       try {
-        const message = JSON.parse(event.data);
+        const message = JSON.parse(data);
         console.log("📩 Mensaje recibido:", message);
-        if (message.type === "menu-changed") {
-          setMenuUpdate(message.data);
-        } else if (message.type === "pong") {
-          console.log("📡 Pong recibido del servidor");
+
+        if (message.type === "ping") {
+          socket.send(JSON.stringify({ type: "pong" }));
+          console.log("📡 Pong enviado al cliente");
+        } else if (message.type === "menu-updated") {
+          wss.clients.forEach((client) => {
+            if (client.readyState === socket.OPEN) {
+              client.send(
+                JSON.stringify({
+                  type: "menu-changed",
+                  restaurantId: message.restaurantId,
+                  item: message.item,
+                })
+              );
+            }
+          });
         }
       } catch (error) {
-        console.error("❌ Error al parsear mensaje WebSocket:", error.message);
+        console.error("❌ Error al procesar mensaje WebSocket:", error.message);
       }
-    };
+    });
 
-    ws.onclose = (event) => {
-      console.log(`🔹 Cerrando conexión WebSocket - Código: ${event.code}, Razón: ${event.reason || "Desconocida"}`);
-      setIsConnected(false);
-      setSocket(null);
-      clearInterval(pingInterval.current);
+    socket.on("close", () => {
+      console.log("🔹 Cliente desconectado del WebSocket");
+    });
 
-      // Intentar reconectar
-      reconnectAttempts.current += 1;
-      console.log(`🔄 Intentando reconectar (${reconnectAttempts.current}/${maxReconnectAttempts}) en ${reconnectInterval / 1000}s...`);
-      setTimeout(connectWebSocket, reconnectInterval);
-    };
+    socket.on("error", (error) => {
+      console.error("❌ Error en WebSocket:", error.message);
+    });
+  });
 
-    ws.onerror = (error) => {
-      console.error("❌ Error en WebSocket:", error.message || error);
-      ws.close(); // Forzar cierre para disparar onclose y reconectar
-    };
-  };
-
-  useEffect(() => {
-    connectWebSocket();
-
-    return () => {
-      if (socket) {
-        console.log("🔹 Cerrando conexión WebSocket al desmontar");
-        socket.close();
-        clearInterval(pingInterval.current);
-      }
-    };
-  }, [url]);
-
-  return { socket, isConnected, menuUpdate };
+  console.log("🚀 WebSocket inicializado");
 };
 
-export default useSocket;
+module.exports = { initializeSocket };
 
 
