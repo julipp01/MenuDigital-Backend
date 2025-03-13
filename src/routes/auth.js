@@ -1,18 +1,22 @@
-// backend/src/routes/auth.js
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const router = express.Router();
 const pool = require("../config/db");
 
-const JWT_SECRET = process.env.JWT_SECRET || "secret_key";
+// Validar JWT_SECRET
+if (!process.env.JWT_SECRET) {
+  console.error("[AUTH] Error: JWT_SECRET no está definido en las variables de entorno.");
+  process.exit(1);
+}
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // Middleware de autenticación
 const authMiddleware = (req, res, next) => {
-  const token = req.headers.authorization && req.headers.authorization.split(" ")[1];
+  const token = req.headers.authorization?.split(" ")[1];
   if (!token) {
     console.log("[AUTH] No se proporcionó token en la solicitud.");
-    return res.status(401).json({ error: "No se proporcionó token" });
+    return res.status(401).json({ error: "No se proporcionó token de autenticación" });
   }
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
@@ -21,7 +25,7 @@ const authMiddleware = (req, res, next) => {
     next();
   } catch (err) {
     console.error("[AUTH] Error al verificar token:", err.message);
-    return res.status(401).json({ error: "Token inválido" });
+    return res.status(401).json({ error: "Token inválido o expirado" });
   }
 };
 
@@ -32,7 +36,7 @@ router.post("/register", async (req, res) => {
     const { name, email, password } = req.body;
     if (!name || !email || !password) {
       console.error("[REGISTER] Error: Faltan campos obligatorios.");
-      return res.status(400).json({ error: "Todos los campos son obligatorios" });
+      return res.status(400).json({ error: "Todos los campos son obligatorios (name, email, password)" });
     }
 
     const emailLower = email.toLowerCase();
@@ -108,18 +112,18 @@ router.post("/register", async (req, res) => {
       res.status(201).json({ id: userResult.insertId, name, email: emailLower, role, restaurantId, token });
     } catch (error) {
       await connection.rollback();
-      console.error("[REGISTER] Error en la transacción:", error);
+      console.error("[REGISTER] Error en la transacción:", error.message);
       res.status(500).json({ error: "Error al registrar usuario y restaurante", details: error.message });
     } finally {
       connection.release();
     }
   } catch (err) {
-    console.error("[REGISTER] Error en el registro:", err);
-    res.status(500).json({ error: "Error en el servidor" });
+    console.error("[REGISTER] Error en el registro:", err.message);
+    res.status(500).json({ error: "Error en el servidor al registrar", details: err.message });
   }
 });
 
-// 🔹 Login de usuario (sin cambios)
+// 🔹 Login de usuario
 router.post("/login", async (req, res) => {
   console.log(`[LOGIN] Solicitud recibida: ${JSON.stringify({ email: req.body.email })}`);
   try {
@@ -157,14 +161,58 @@ router.post("/login", async (req, res) => {
       user: { id: user.id, name: user.name, email: user.email, role: user.role, restaurantId: user.restaurant_id },
     });
   } catch (err) {
-    console.error("[LOGIN] Error en login:", err);
-    res.status(500).json({ error: "Error en el servidor" });
+    console.error("[LOGIN] Error en login:", err.message);
+    res.status(500).json({ error: "Error en el servidor al iniciar sesión", details: err.message });
   }
 });
 
-// 🔹 Actualizar Plan del Usuario (sin cambios)
+// 🔹 Verificar token
+router.get("/verify", async (req, res) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) {
+    console.error("[AUTH] No se proporcionó token para verificar");
+    return res.status(401).json({ message: "No se proporcionó token de autenticación" });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const [users] = await pool.query("SELECT id, email, name, role, restaurant_id FROM users WHERE id = ?", [decoded.id]);
+    if (!users.length) {
+      console.error("[AUTH] Usuario no encontrado para verificar:", decoded.id);
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+
+    console.log("[AUTH] Token verificado exitosamente:", { userId: users[0].id, email: users[0].email });
+    res.status(200).json(users[0]);
+  } catch (error) {
+    console.error("[AUTH] Error al verificar token:", error.message);
+    res.status(401).json({ message: "Token inválido o expirado", details: error.message });
+  }
+});
+
+// 🔹 Actualizar Plan del Usuario
 router.put("/update-plan", authMiddleware, async (req, res) => {
-  // ... (sin cambios aquí)
+  try {
+    const { planId } = req.body;
+    const userId = req.user.id;
+
+    if (!planId) {
+      console.error("[UPDATE-PLAN] Error: Faltan datos del plan.");
+      return res.status(400).json({ error: "El plan es obligatorio" });
+    }
+
+    const [result] = await pool.query("UPDATE users SET plan_id = ? WHERE id = ?", [planId, userId]);
+    if (result.affectedRows === 0) {
+      console.warn(`[UPDATE-PLAN] Usuario no encontrado: ${userId}`);
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+
+    console.log(`[UPDATE-PLAN] Plan actualizado para usuario: ${userId} (plan_id: ${planId})`);
+    res.json({ message: "Plan actualizado correctamente" });
+  } catch (err) {
+    console.error("[UPDATE-PLAN] Error al actualizar plan:", err.message);
+    res.status(500).json({ error: "Error en el servidor al actualizar el plan", details: err.message });
+  }
 });
 
 module.exports = router;
