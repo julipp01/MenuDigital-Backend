@@ -8,15 +8,18 @@ const initializeSocket = (server) => {
     return null;
   }
 
-  // Configurar CORS dinámicamente con RegExp para producción
-  const allowedOrigins = process.env.NODE_ENV === "production"
-    ? [/https:\/\/menu-digital-bdhg\.vercel\.app/, /https:\/\/.*\.vercel\.app/]
-    : ["http://localhost:5173", "http://192.168.18.26:5173"];
+  const allowedOrigins =
+    process.env.NODE_ENV === "production"
+      ? [/https:\/\/menu-digital-bdhg\.vercel\.app/, /https:\/\/.*\.vercel\.app/]
+      : ["http://localhost:5173", "http://192.168.18.26:5173"];
 
   io = new Server(server, {
     cors: {
       origin: (origin, callback) => {
-        if (!origin || allowedOrigins.some((regex) => regex.test(origin) || allowedOrigins.includes(origin))) {
+        if (
+          !origin ||
+          allowedOrigins.some((regex) => (regex instanceof RegExp ? regex.test(origin) : regex === origin))
+        ) {
           callback(null, true);
         } else {
           console.error(`[Socket.IO CORS] Bloqueado: ${origin}`);
@@ -26,7 +29,7 @@ const initializeSocket = (server) => {
       methods: ["GET", "POST"],
       credentials: true,
     },
-    transports: ["websocket"], // Forzar WebSocket para evitar polling
+    transports: ["websocket"],
   });
 
   const socketUrl = process.env.SOCKET_URL || "wss://menudigital-backend-production.up.railway.app";
@@ -39,27 +42,40 @@ const initializeSocket = (server) => {
       console.warn(`❌ Cliente desconectado (${socket.id}): Razón: ${reason}`);
     });
 
-    // Evento de prueba para verificar conexión
     socket.on("message", (data) => {
       console.log(`📩 Mensaje recibido de ${socket.id}:`, data);
-      socket.emit("message", "✅ Respuesta del servidor WebSocket");
+      socket.send({ type: "message", data: "✅ Respuesta del servidor WebSocket" });
     });
 
-    // Evento para notificar cambios en el menú (ejemplo)
     socket.on("menu-updated", (data) => {
+      if (!data || !data.restaurantId) {
+        console.warn(`[Socket.IO] Datos inválidos en menu-updated desde ${socket.id}:`, data);
+        return;
+      }
       console.log(`📩 Menú actualizado recibido de ${socket.id}:`, data);
-      io.emit("menu-changed", { message: "Menú actualizado", data }); // Emitir a todos los clientes
+      io.emit("menu-changed", { type: "menu-changed", message: "Menú actualizado", data });
+    });
+
+    socket.on("error", (error) => {
+      console.error(`❌ Error en socket ${socket.id}:`, error);
     });
   });
 
-  // Manejo de errores y reconexión automática
+  let reconnectAttempts = 0;
+  const maxReconnectAttempts = 5;
   io.on("error", (error) => {
     console.error("❌ Error en WebSocket:", error);
-    console.log("🔄 Intentando reconectar en 5 segundos...");
-    setTimeout(() => initializeSocket(server), 5000);
+    if (reconnectAttempts < maxReconnectAttempts) {
+      console.log(`🔄 Intentando reconectar (${reconnectAttempts + 1}/${maxReconnectAttempts})...`);
+      setTimeout(() => {
+        reconnectAttempts++;
+        initializeSocket(server);
+      }, 5000);
+    } else {
+      console.error("❌ Máximo de intentos de reconexión alcanzado.");
+    }
   });
 
-  // Manejo de cierre del servidor
   server.on("close", () => {
     if (io) {
       io.close();
