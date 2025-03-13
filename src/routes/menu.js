@@ -9,16 +9,16 @@ const path = require("path");
 const authMiddleware = (req, res, next) => {
   const token = req.headers.authorization && req.headers.authorization.split(" ")[1];
   if (!token) {
-    console.log("No se proporcionó token en la solicitud.");
+    console.log("[AUTH] No se proporcionó token en la solicitud.");
     return res.status(401).json({ error: "No se proporcionó token" });
   }
   try {
     const decoded = require("jsonwebtoken").verify(token, process.env.JWT_SECRET || "secret_key");
-    console.log("Token decodificado:", decoded);
+    console.log("[AUTH] Token decodificado:", decoded);
     req.user = decoded;
     next();
   } catch (err) {
-    console.error("Error al verificar token:", err.message);
+    console.error("[AUTH] Error al verificar token:", err.message);
     return res.status(401).json({ error: "Token inválido" });
   }
 };
@@ -27,19 +27,19 @@ const authMiddleware = (req, res, next) => {
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const uploadPath = path.join(__dirname, "../../uploads");
-    console.log("Ruta de subida establecida:", uploadPath);
+    console.log("[MULTER] Ruta de subida establecida:", uploadPath);
     cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
-    const filename = `${Date.now()}-${file.originalname}`;
-    console.log("Archivo renombrado como:", filename);
+    const filename = `${Date.now()}-${file.originalname.replace(/\s+/g, "-")}`;
+    console.log("[MULTER] Archivo renombrado como:", filename);
     cb(null, filename);
   },
 });
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 10 * 1024 * 1024 }, // Límite de 10MB
   fileFilter: (req, file, cb) => {
     const filetypes = /jpeg|jpg|png|gltf|glb/;
     const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
@@ -58,14 +58,14 @@ const parseJSONSafe = (data, defaultValue) => {
   try {
     return JSON.parse(data);
   } catch (error) {
-    console.warn("Error al parsear JSON, usando valor por defecto:", error.message);
+    console.warn("[JSON Parser] Error al parsear JSON, usando valor por defecto:", error.message);
     return defaultValue;
   }
 };
 
 // Endpoint GET: Obtener menú y datos del restaurante (público)
 router.get("/:restaurantId", async (req, res) => {
-  const restaurantId = parseInt(req.params.restaurantId);
+  const restaurantId = parseInt(req.params.restaurantId, 10);
   console.log("[GET Menu] Solicitando menú y datos del restaurante con ID:", restaurantId);
   try {
     // Obtener datos del restaurante
@@ -101,20 +101,27 @@ router.get("/:restaurantId", async (req, res) => {
         name: restaurant.name,
         logo_url: restaurant.logo_url,
         colors: restaurant.colors,
-        sections: restaurant.sections
+        sections: restaurant.sections,
       },
-      items
+      items,
     });
   } catch (error) {
-    console.error("[GET Menu] Error al obtener menú:", error);
+    console.error("[GET Menu] Error al obtener menú:", error.message);
     res.status(500).json({ error: "Error en el servidor", details: error.message });
   }
 });
 
 // Endpoint POST: Agregar ítem al menú (protegido)
 router.post("/:restaurantId", authMiddleware, async (req, res) => {
-  const restaurantId = parseInt(req.params.restaurantId);
+  const restaurantId = parseInt(req.params.restaurantId, 10);
   const { name, price, description, category, imageUrl } = req.body;
+
+  // Validar datos de entrada
+  if (!name || !price || !category) {
+    console.log("[POST Menu] Faltan campos obligatorios");
+    return res.status(400).json({ error: "Faltan campos obligatorios: nombre, precio o categoría" });
+  }
+
   console.log("[POST Menu] Agregando ítem al menú:", { restaurantId, name, price, description, category, imageUrl });
   try {
     const query = `
@@ -124,14 +131,47 @@ router.post("/:restaurantId", authMiddleware, async (req, res) => {
     console.log("[POST Menu] Ítem agregado con ID:", result.insertId);
     res.status(201).json({ id: result.insertId, message: "Ítem agregado con éxito" });
   } catch (error) {
-    console.error("[POST Menu] Error al agregar ítem:", error);
+    console.error("[POST Menu] Error al agregar ítem:", error.message);
+    res.status(500).json({ error: "Error en el servidor", details: error.message });
+  }
+});
+
+// Endpoint PUT: Actualizar ítem del menú (protegido)
+router.put("/:restaurantId/:itemId", authMiddleware, async (req, res) => {
+  const restaurantId = parseInt(req.params.restaurantId, 10);
+  const itemId = parseInt(req.params.itemId, 10);
+  const { name, price, description, category, imageUrl } = req.body;
+
+  // Validar datos de entrada
+  if (!name || !price || !category) {
+    console.log("[PUT Menu Item] Faltan campos obligatorios");
+    return res.status(400).json({ error: "Faltan campos obligatorios: nombre, precio o categoría" });
+  }
+
+  console.log("[PUT Menu Item] Actualizando ítem:", { restaurantId, itemId, name, price, description, category, imageUrl });
+
+  try {
+    const [result] = await pool.query(
+      "UPDATE menu_items SET name = ?, price = ?, description = ?, category = ?, image_url = ? WHERE id = ? AND restaurant_id = ?",
+      [name, price, description, category, imageUrl, itemId, restaurantId]
+    );
+
+    if (result.affectedRows === 0) {
+      console.log("[PUT Menu Item] Ítem no encontrado:", { restaurantId, itemId });
+      return res.status(404).json({ error: "Ítem no encontrado" });
+    }
+
+    console.log("[PUT Menu Item] Ítem actualizado con éxito:", { restaurantId, itemId });
+    res.json({ message: "Ítem actualizado con éxito" });
+  } catch (error) {
+    console.error("[PUT Menu Item] Error:", error.message);
     res.status(500).json({ error: "Error en el servidor", details: error.message });
   }
 });
 
 // Endpoint POST: Subir imagen (protegido)
 router.post("/:restaurantId/upload", authMiddleware, upload.single("file"), async (req, res) => {
-  const restaurantId = parseInt(req.params.restaurantId);
+  const restaurantId = parseInt(req.params.restaurantId, 10);
   console.log("[POST Upload] Subiendo archivo para restaurante con ID:", restaurantId);
   if (!req.file) {
     console.log("[POST Upload] No se proporcionó archivo válido");
