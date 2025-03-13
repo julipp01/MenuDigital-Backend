@@ -8,16 +8,15 @@ const initializeSocket = (server) => {
     return null;
   }
 
-  // Configurar CORS dinámicamente para desarrollo y producción
-  const allowedOrigins =
-    process.env.NODE_ENV === "production"
-      ? ["https://menu-digital-bdhg.vercel.app", "https://menu-digital-bdhg-py2kw9tvp-julipp01s-projects.vercel.app"] // Ajusta según tu frontend en producción
-      : ["http://localhost:5173", "http://192.168.18.26:5173"];
+  // Configurar CORS dinámicamente con RegExp para producción
+  const allowedOrigins = process.env.NODE_ENV === "production"
+    ? [/https:\/\/menu-digital-bdhg\.vercel\.app/, /https:\/\/.*\.vercel\.app/]
+    : ["http://localhost:5173", "http://192.168.18.26:5173"];
 
   io = new Server(server, {
     cors: {
       origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) {
+        if (!origin || allowedOrigins.some((regex) => regex.test(origin) || allowedOrigins.includes(origin))) {
           callback(null, true);
         } else {
           console.error(`[Socket.IO CORS] Bloqueado: ${origin}`);
@@ -30,7 +29,7 @@ const initializeSocket = (server) => {
     transports: ["websocket"], // Forzar WebSocket para evitar polling
   });
 
-  const socketUrl = process.env.SOCKET_URL || (process.env.NODE_ENV === "production" ? "wss://menudigital-backend-production.up.railway.app" : "ws://localhost:5000");
+  const socketUrl = process.env.SOCKET_URL || "wss://menudigital-backend-production.up.railway.app";
   console.log(`✅ WebSockets habilitados en: ${socketUrl}`);
 
   io.on("connection", (socket) => {
@@ -53,6 +52,13 @@ const initializeSocket = (server) => {
     });
   });
 
+  // Manejo de errores y reconexión automática
+  io.on("error", (error) => {
+    console.error("❌ Error en WebSocket:", error);
+    console.log("🔄 Intentando reconectar en 5 segundos...");
+    setTimeout(() => initializeSocket(server), 5000);
+  });
+
   // Manejo de cierre del servidor
   server.on("close", () => {
     if (io) {
@@ -70,4 +76,5 @@ const getSocketInstance = () => {
 };
 
 module.exports = { initializeSocket, getSocketInstance };
+
 
