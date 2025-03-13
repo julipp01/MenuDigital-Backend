@@ -82,7 +82,6 @@ app.get("/", (req, res) => {
       status,
     },
   });
-});
 
 // Iniciar el servidor
 const startServer = async () => {
