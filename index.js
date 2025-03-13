@@ -13,27 +13,35 @@ const NODE_ENV = process.env.NODE_ENV || "development";
 const BACKEND_URL = process.env.BACKEND_URL || "https://menudigital-backend-production.up.railway.app";
 const SOCKET_URL = process.env.SOCKET_URL || "wss://menudigital-backend-production.up.railway.app";
 
-// Inicializar WebSocket\initializeSocket(server);
+// 🔹 Inicializar WebSocket
+initializeSocket(server);
 
-// Configuración de CORS
+// 🔹 Configuración de CORS
 const allowedOrigins = NODE_ENV === "production"
   ? ["https://menu-digital-bdhg.vercel.app", "https://tu-frontend-url.com"]
   : ["http://localhost:5173", "https://menu-digital-bdhg.vercel.app"];
 
 app.use(cors({
-  origin: allowedOrigins,
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.error(`[CORS] Bloqueado: ${origin}`);
+      callback(new Error("No permitido por CORS"));
+    }
+  },
   methods: ["GET", "POST", "PUT", "DELETE"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
 }));
 
-// Middleware
+// 🔹 Middlewares
 app.use(express.json({ limit: "10mb" }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/models", express.static(path.join(__dirname, "models")));
 app.use("/thumbnails", express.static(path.join(__dirname, "thumbnails")));
 
-// Inicialización de la base de datos
+// 🔹 Inicialización de la base de datos
 const initializeDatabase = async () => {
   const maxRetries = 5;
   const retryDelay = 2000;
@@ -54,7 +62,7 @@ const initializeDatabase = async () => {
   }
 };
 
-// Rutas API
+// 🔹 Rutas API
 app.use("/api/auth", require("./src/routes/auth"));
 app.use("/api/restaurantes", require("./src/routes/restaurantes"));
 app.use("/api/menu", require("./src/routes/menu"));
@@ -62,35 +70,38 @@ app.use("/api/dashboard", require("./src/routes/dashboard"));
 app.use("/api/mesas", require("./src/routes/mesas"));
 app.use("/api/templates", require("./src/routes/templates"));
 
-// Ruta raíz
+// 🔹 Ruta raíz
 app.get("/", (req, res) => {
   res.status(200).send(`API funcionando 🚀 - Entorno: ${NODE_ENV}`);
 });
 
-// Manejo de errores\app.use((err, req, res, next) => {
-  const status = err.status || 500;
-  console.error("Error en el servidor:", {
-    message: err.message,
-    stack: err.stack,
+// 🔹 Manejo de errores
+app.use((error, req, res, next) => {
+  const status = error.status || 500;
+  console.error("❌ Error en el servidor:", {
+    message: error.message,
+    stack: error.stack,
     path: req.path,
     method: req.method,
     timestamp: new Date().toISOString(),
   });
+
   res.status(status).json({
     error: {
-      message: err.message || "Error en el servidor",
+      message: error.message || "Error en el servidor",
       status,
     },
   });
+});
 
-// Iniciar el servidor
+// 🔹 Iniciar el servidor
 const startServer = async () => {
   try {
     await initializeDatabase();
     server.listen(PORT, "0.0.0.0", () => {
       console.log(`🚀 Servidor corriendo en ${BACKEND_URL}:${PORT}`);
       console.log(`🚀 WebSocket disponible en ${SOCKET_URL}`);
-      console.log(`CORS habilitado para: ${allowedOrigins.join(", ")}`);
+      console.log(`✅ CORS habilitado para: ${allowedOrigins.join(", ")}`);
     });
   } catch (error) {
     console.error("❌ Error al iniciar el servidor:", error.message);
