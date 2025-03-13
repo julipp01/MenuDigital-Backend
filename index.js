@@ -99,7 +99,7 @@ const startServer = async () => {
   try {
     await initializeDatabase();
     server.listen(PORT, "0.0.0.0", () => {
-      console.log(`🚀 Servidor corriendo en ${BACKEND_URL}:${PORT}`);
+      console.log(`🚀 Servidor corriendo en ${BACKEND_URL}`);
       console.log(`🚀 WebSocket disponible en ${SOCKET_URL}`);
       console.log(`✅ CORS habilitado para: ${allowedOrigins.join(", ")}`);
     });
