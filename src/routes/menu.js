@@ -166,6 +166,13 @@ router.post("/:restaurantId/upload", authMiddleware, upload.single("file"), asyn
     console.log("[POST Upload] No se proporcionó archivo válido");
     return res.status(400).json({ error: "No se proporcionó un archivo válido" });
   }
+  console.log("[POST Upload] Detalles del archivo:", {
+    originalname: req.file.originalname,
+    mimetype: req.file.mimetype,
+    size: req.file.size,
+    buffer: req.file.buffer ? "Presente" : "Ausente",
+    fieldname: req.file.fieldname,
+  });
 
   try {
     const result = await new Promise((resolve, reject) => {
@@ -173,7 +180,7 @@ router.post("/:restaurantId/upload", authMiddleware, upload.single("file"), asyn
         {
           resource_type: req.file.mimetype.includes("image") ? "image" : "raw",
           folder: `restaurantes/${restaurantId}/menu`,
-          public_id: `${Date.now()}-${sanitizeHtml(req.file.originalname.replace(/\s+/g, "-"))}`,
+          public_id: `${Date.now()}-${sanitizeHtml(path.parse(req.file.originalname).name.replace(/\s+/g, "-"))}`,
         },
         (error, result) => (error ? reject(error) : resolve(result))
       ).end(req.file.buffer);
@@ -184,7 +191,12 @@ router.post("/:restaurantId/upload", authMiddleware, upload.single("file"), asyn
 
     res.json({ fileUrl });
   } catch (error) {
-    console.error("[POST Upload] Error al subir archivo:", error.message);
+    console.error("[POST Upload] Error al subir archivo:", {
+      message: error.message,
+      code: error.http_code,
+      stack: error.stack,
+      details: error.details,
+    });
     res.status(500).json({ error: "Error al subir el archivo", details: error.message });
   }
 });
