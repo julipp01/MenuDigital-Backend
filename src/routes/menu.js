@@ -1,9 +1,10 @@
-// backend/src/routes/menu.js
 const express = require("express");
 const router = express.Router();
 const pool = require("../config/db");
 const multer = require("multer");
 const path = require("path");
+const jwt = require("jsonwebtoken");
+const cloudinary = require("cloudinary").v2;
 
 // Middleware de autenticación
 const authMiddleware = (req, res, next) => {
@@ -13,7 +14,7 @@ const authMiddleware = (req, res, next) => {
     return res.status(401).json({ error: "No se proporcionó token" });
   }
   try {
-    const decoded = require("jsonwebtoken").verify(token, process.env.JWT_SECRET || "secret_key");
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "secret_key");
     console.log("[AUTH] Token decodificado:", decoded);
     req.user = decoded;
     next();
@@ -23,22 +24,14 @@ const authMiddleware = (req, res, next) => {
   }
 };
 
-// Configuración de multer para subir imágenes
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadPath = path.join(__dirname, "../../uploads");
-    console.log("[MULTER] Ruta de subida establecida:", uploadPath);
-    cb(null, uploadPath);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const filename = `${Date.now()}-${file.originalname.replace(/\s+/g, "-")}`;
-    console.log("[MULTER] Archivo renombrado como:", filename);
-    cb(null, filename);
-  },
+// Configuración de Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || "delzhsy0h",
+  api_key: process.env.CLOUDINARY_API_KEY || "596323794257486",
+  api_secret: process.env.CLOUDINARY_API_SECRET || "w1Ti5eV3bW3COwAbXS1REaVm__k",
 });
+
 const upload = multer({
-  storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // Límite de 10MB
   fileFilter: (req, file, cb) => {
     const filetypes = /jpeg|jpg|png|gltf|glb/;
@@ -49,7 +42,7 @@ const upload = multer({
     }
     cb(new Error("Solo se permiten imágenes JPEG, PNG o modelos GLTF/GLB"));
   },
-});
+}).single("file");
 
 // Función auxiliar para parsear JSON de forma segura
 const parseJSONSafe = (data, defaultValue) => {
@@ -177,9 +170,27 @@ router.post("/:restaurantId/upload", authMiddleware, upload.single("file"), asyn
     console.log("[POST Upload] No se proporcionó archivo válido");
     return res.status(400).json({ error: "No se proporcionó un archivo válido" });
   }
-  const fileUrl = `/uploads/${req.file.filename}`;
-  console.log("[POST Upload] URL del archivo generada:", fileUrl);
-  res.json({ fileUrl });
+
+  try {
+    const result = await new Promise((resolve, reject) => {
+      cloudinary.uploader.upload_stream(
+        {
+          resource_type: req.file.mimetype.includes("image") ? "image" : "raw",
+          folder: `restaurantes/${restaurantId}/menu`,
+          public_id: `${Date.now()}-${sanitizeHtml(req.file.originalname.replace(/\s+/g, "-"))}`,
+        },
+        (error, result) => (error ? reject(error) : resolve(result))
+      ).end(req.file.buffer);
+    });
+
+    const fileUrl = result.secure_url;
+    console.log("[POST Upload] Archivo subido a Cloudinary:", fileUrl);
+
+    res.json({ fileUrl });
+  } catch (error) {
+    console.error("[POST Upload] Error al subir archivo:", error.message);
+    res.status(500).json({ error: "Error al subir el archivo", details: error.message });
+  }
 });
 
 module.exports = router;

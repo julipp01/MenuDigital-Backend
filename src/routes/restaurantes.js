@@ -8,24 +8,18 @@ const Joi = require("joi"); // Para validación de datos
 const compression = require("compression"); // Para compresión de respuestas
 const winston = require("winston"); // Para logging avanzado
 const sanitizeHtml = require("sanitize-html"); // Para sanitizar entradas
+const cloudinary = require("cloudinary").v2;
 
-// Configuración de logging con winston
 const logger = winston.createLogger({
   level: "info",
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
+  format: winston.format.combine(winston.format.timestamp(), winston.format.json()),
   transports: [
     new winston.transports.File({ filename: "logs/error.log", level: "error" }),
     new winston.transports.File({ filename: "logs/combined.log" }),
-    new winston.transports.Console({
-      format: winston.format.simple(),
-    }),
+    new winston.transports.Console({ format: winston.format.simple() }),
   ],
 });
 
-// Constantes para mensajes de error
 const ERRORS = {
   NO_TOKEN: "No se proporcionó token",
   INVALID_TOKEN: "Token inválido",
@@ -36,10 +30,8 @@ const ERRORS = {
   INVALID_REQUEST: "Solicitud inválida",
 };
 
-// Middleware de compresión
 router.use(compression());
 
-// Middleware de autenticación
 const authMiddleware = (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
   if (!token) {
@@ -57,23 +49,31 @@ const authMiddleware = (req, res, next) => {
   }
 };
 
-// Configuración de multer para subir logos
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadPath = path.join(__dirname, "../../uploads");
-    logger.info("[Multer] Guardando en", { path: uploadPath });
-    cb(null, uploadPath);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const filename = `${Date.now()}-${sanitizeHtml(file.originalname.replace(/\s+/g, "-"))}`;
-    logger.info("[Multer] Archivo renombrado como", { filename });
-    cb(null, filename);
-  },
+const restaurantSchema = Joi.object({
+  name: Joi.string().trim().max(255).allow(null),
+  colors: Joi.object().pattern(Joi.string(), Joi.string()).required(),
+  logo: Joi.string().uri().allow(null),
+  sections: Joi.object().required(),
+  plan_id: Joi.number().integer().allow(null),
+});
+
+const validateRestaurantUpdate = (req, res, next) => {
+  const { error } = restaurantSchema.validate(req.body, { abortEarly: false });
+  if (error) {
+    logger.warn("[Validation] Datos inválidos", { errors: error.details, ip: req.ip });
+    return res.status(400).json({ error: ERRORS.INVALID_REQUEST, details: error.details });
+  }
+  next();
+};
+
+// Configuración de Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || "delzhsy0h",
+  api_key: process.env.CLOUDINARY_API_KEY || "596323794257486",
+  api_secret: process.env.CLOUDINARY_API_SECRET || "w1Ti5eV3bW3COwAbXS1REaVm__k",
 });
 
 const upload = multer({
-  storage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
   fileFilter: (req, file, cb) => {
     const filetypes = /\.(jpe?g|png)$/i;
@@ -83,25 +83,6 @@ const upload = multer({
     cb(new Error(ERRORS.INVALID_FILE));
   },
 }).single("logo");
-
-// Esquema de validación para PUT /:restaurantId
-const restaurantSchema = Joi.object({
-  name: Joi.string().trim().max(255).allow(null),
-  colors: Joi.object().pattern(Joi.string(), Joi.string()).required(),
-  logo: Joi.string().uri().allow(null),
-  sections: Joi.object().required(),
-  plan_id: Joi.number().integer().allow(null),
-});
-
-// Middleware de validación para PUT
-const validateRestaurantUpdate = (req, res, next) => {
-  const { error } = restaurantSchema.validate(req.body, { abortEarly: false });
-  if (error) {
-    logger.warn("[Validation] Datos inválidos", { errors: error.details, ip: req.ip });
-    return res.status(400).json({ error: ERRORS.INVALID_REQUEST, details: error.details });
-  }
-  next();
-};
 
 // ✅ GET: Obtener datos de un restaurante (protegido)
 router.get("/:restaurantId", authMiddleware, async (req, res) => {
@@ -154,15 +135,27 @@ router.post("/:restaurantId/upload-logo", authMiddleware, (req, res) => {
       return res.status(400).json({ error: ERRORS.NO_FILE });
     }
 
-    const logoUrl = `/uploads/${req.file.filename}`;
-    logger.info("[POST Upload Logo] Logo subido", { logoUrl, restaurantId, ip: req.ip });
     try {
-      const [result] = await pool.query(
+      const result = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_stream(
+          {
+            resource_type: "image",
+            folder: `restaurantes/${restaurantId}/logos`,
+            public_id: `${Date.now()}-${sanitizeHtml(req.file.originalname.replace(/\s+/g, "-"))}`,
+          },
+          (error, result) => (error ? reject(error) : resolve(result))
+        ).end(req.file.buffer);
+      });
+
+      const logoUrl = result.secure_url;
+      logger.info("[POST Upload Logo] Logo subido a Cloudinary", { logoUrl, restaurantId, ip: req.ip });
+
+      const [resultDb] = await pool.query(
         "UPDATE restaurants SET logo_url = ? WHERE id = ? AND owner_id = ?",
         [logoUrl, restaurantId, req.user.id]
       );
 
-      if (result.affectedRows === 0) {
+      if (resultDb.affectedRows === 0) {
         logger.warn("[POST Upload Logo] Restaurante no encontrado o no autorizado", { restaurantId, userId: req.user.id });
         return res.status(404).json({ error: ERRORS.NOT_FOUND });
       }
@@ -205,9 +198,6 @@ router.put("/:restaurantId", authMiddleware, validateRestaurantUpdate, async (re
     res.status(500).json({ error: ERRORS.SERVER_ERROR, details: error.message });
   }
 });
-
-// Configuración de archivos estáticos (necesario para servir archivos de /uploads)
-router.use("/uploads", express.static(path.join(__dirname, "../../uploads")));
 
 module.exports = router;
 
