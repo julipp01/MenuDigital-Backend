@@ -176,6 +176,13 @@ router.post("/:restaurantId/upload", authMiddleware, upload.single("archivo"), a
   });
 
   try {
+    // Verificar configuración de Cloudinary
+    console.log("[POST Upload] Configuración de Cloudinary:", {
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME || "delzhsy0h",
+      api_key: process.env.CLOUDINARY_API_KEY || "596323794257486",
+      api_secret: process.env.CLOUDINARY_API_SECRET ? "[REDACTED]" : "Ausente",
+    });
+
     const result = await new Promise((resolve, reject) => {
       cloudinary.uploader.upload_stream(
         {
