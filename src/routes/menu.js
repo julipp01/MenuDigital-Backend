@@ -162,11 +162,14 @@ router.put("/:restaurantId/:itemId", authMiddleware, async (req, res) => {
 // Endpoint POST: Subir imagen (protegido)
 router.post("/:restaurantId/upload", authMiddleware, upload.single("archivo"), async (req, res) => {
   const restaurantId = parseInt(req.params.restaurantId, 10);
-  console.log("[POST Upload] Subiendo archivo para restaurante con ID:", restaurantId);
+  const itemId = req.body.itemId ? parseInt(req.body.itemId, 10) : null;
+  console.log("[POST Upload] Subiendo archivo para restaurante con ID:", restaurantId, "Item ID:", itemId);
+
   if (!req.file) {
     console.log("[POST Upload] No se proporcionó archivo válido");
     return res.status(400).json({ error: "No se proporcionó un archivo válido" });
   }
+
   console.log("[POST Upload] Detalles del archivo:", {
     originalname: req.file.originalname,
     mimetype: req.file.mimetype,
@@ -196,6 +199,20 @@ router.post("/:restaurantId/upload", authMiddleware, upload.single("archivo"), a
 
     const fileUrl = result.secure_url;
     console.log("[POST Upload] Archivo subido a Cloudinary:", fileUrl);
+
+    // Si se proporciona un itemId, actualizar el ítem correspondiente en menu_items
+    if (itemId) {
+      const query = "UPDATE menu_items SET image_url = ? WHERE id = ? AND restaurant_id = ?";
+      const [resultDb] = await pool.query(query, [fileUrl, itemId, restaurantId]);
+
+      if (resultDb.affectedRows === 0) {
+        console.log("[POST Upload] Ítem no encontrado para restaurantId:", restaurantId, "itemId:", itemId);
+        return res.status(404).json({ error: "Ítem no encontrado" });
+      }
+      console.log("[POST Upload] Imagen asociada al ítem con ID:", itemId);
+    } else {
+      console.log("[POST Upload] No se proporcionó itemId; la URL se devuelve sin asociar a un ítem");
+    }
 
     res.json({ fileUrl });
   } catch (error) {
