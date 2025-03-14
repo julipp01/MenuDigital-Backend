@@ -141,7 +141,7 @@ router.post("/:restaurantId/upload-logo", authMiddleware, (req, res) => {
           {
             resource_type: "image",
             folder: `restaurantes/${restaurantId}/logos`,
-            public_id: `${Date.now()}-${sanitizeHtml(req.file.originalname.replace(/\s+/g, "-"))}`,
+            public_id: `${Date.now()}-${sanitizeHtml(path.parse(req.file.originalname).name.replace(/\s+/g, "-"))}`, // Usar solo el nombre sin extensión
           },
           (error, result) => (error ? reject(error) : resolve(result))
         ).end(req.file.buffer);
