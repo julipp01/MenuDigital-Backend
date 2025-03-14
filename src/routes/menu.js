@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const pool = require("../config/db");
-const multer = require("multer");
+const multer = require("multer"); // Aseguramos que multer esté importado
 const path = require("path");
 const jwt = require("jsonwebtoken");
 const cloudinary = require("cloudinary").v2;
@@ -32,7 +32,7 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET || "w1Ti5eV3bW3COwAbXS1REaVm__k",
 });
 
-// Configuración de multer
+// Configuración de multer (aseguramos que sea una instancia válida)
 const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // Límite de 10MB
   fileFilter: (req, file, cb) => {
@@ -44,7 +44,7 @@ const upload = multer({
     }
     cb(new Error("Solo se permiten imágenes JPEG, PNG o modelos GLTF/GLB"));
   },
-}).single("file"); // Cambiado de "archivo" a "file" para coincidir con el frontend
+});
 
 // Función auxiliar para parsear JSON de forma segura
 const parseJSONSafe = (data, defaultValue) => {
