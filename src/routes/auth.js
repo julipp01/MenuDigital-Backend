@@ -56,8 +56,8 @@ router.post("/register", async (req, res) => {
     try {
       // Insertar un nuevo restaurante
       const [restaurantResult] = await connection.query(
-        "INSERT INTO restaurants (name, template_id, colors) VALUES (?, ?, ?)",
-        [name + "'s Restaurant", 2, '{"primary": "#F28C38", "secondary": "#1A1A1A"}'] // Pollería por defecto
+        "INSERT INTO restaurants (name, template_id, colors, owner_id) VALUES (?, ?, ?, ?)",
+        [name + "'s Restaurant", 2, '{"primary": "#F28C38", "secondary": "#1A1A1A"}', null] // Pollería por defecto, owner_id se asignará después
       );
       const restaurantId = restaurantResult.insertId;
       console.log(`[REGISTER] Restaurante creado con ID: ${restaurantId}`);
@@ -67,7 +67,11 @@ router.post("/register", async (req, res) => {
         "INSERT INTO users (name, email, password, role, restaurant_id) VALUES (?, ?, ?, ?, ?)",
         [name, emailLower, hashedPassword, role, restaurantId]
       );
-      console.log(`[REGISTER] Usuario registrado: ${emailLower} (ID: ${userResult.insertId}, restaurant_id: ${restaurantId})`);
+      const userId = userResult.insertId;
+      console.log(`[REGISTER] Usuario registrado: ${emailLower} (ID: ${userId}, restaurant_id: ${restaurantId})`);
+
+      // Actualizar el restaurante con el owner_id
+      await connection.query("UPDATE restaurants SET owner_id = ? WHERE id = ?", [userId, restaurantId]);
 
       // Ítems predefinidos de Pollería (template_id = 2)
       const predefinedItems = [
@@ -93,7 +97,7 @@ router.post("/register", async (req, res) => {
         item.price,
         item.description,
         item.category,
-        item.image_url
+        item.image_url,
       ]);
 
       await connection.query(
@@ -104,12 +108,8 @@ router.post("/register", async (req, res) => {
 
       await connection.commit();
 
-      const token = jwt.sign(
-        { id: userResult.insertId, email: emailLower, name, role, restaurantId },
-        JWT_SECRET,
-        { expiresIn: "1h" }
-      );
-      res.status(201).json({ id: userResult.insertId, name, email: emailLower, role, restaurantId, token });
+      // No generamos token aquí, ya que el login posterior lo hará
+      res.status(201).json({ id: userId, name, email: emailLower, role, restaurantId });
     } catch (error) {
       await connection.rollback();
       console.error("[REGISTER] Error en la transacción:", error.message);
@@ -171,7 +171,7 @@ router.get("/verify", async (req, res) => {
   const token = req.headers.authorization?.split(" ")[1];
   if (!token) {
     console.error("[AUTH] No se proporcionó token para verificar");
-    return res.status(401).json({ message: "No se proporcionó token de autenticación" });
+    return res.status(401).json({ error: "No se proporcionó token de autenticación" });
   }
 
   try {
@@ -179,14 +179,20 @@ router.get("/verify", async (req, res) => {
     const [users] = await pool.query("SELECT id, email, name, role, restaurant_id FROM users WHERE id = ?", [decoded.id]);
     if (!users.length) {
       console.error("[AUTH] Usuario no encontrado para verificar:", decoded.id);
-      return res.status(404).json({ message: "Usuario no encontrado" });
+      return res.status(404).json({ error: "Usuario no encontrado" });
     }
 
     console.log("[AUTH] Token verificado exitosamente:", { userId: users[0].id, email: users[0].email });
-    res.status(200).json(users[0]);
+    res.status(200).json({
+      id: users[0].id,
+      email: users[0].email,
+      name: users[0].name,
+      role: users[0].role,
+      restaurantId: users[0].restaurant_id, // Asegúrate de incluir restaurantId
+    });
   } catch (error) {
     console.error("[AUTH] Error al verificar token:", error.message);
-    res.status(401).json({ message: "Token inválido o expirado", details: error.message });
+    res.status(401).json({ error: "Token inválido o expirado", details: error.message });
   }
 });
 
