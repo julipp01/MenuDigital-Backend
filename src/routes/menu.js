@@ -5,7 +5,7 @@ const multer = require("multer");
 const path = require("path");
 const jwt = require("jsonwebtoken");
 const cloudinary = require("cloudinary").v2;
-const sanitizeHtml = require("sanitize-html"); // Importar sanitize-html
+const sanitizeHtml = require("sanitize-html");
 
 // Middleware de autenticación
 const authMiddleware = (req, res, next) => {
@@ -44,7 +44,7 @@ const upload = multer({
     }
     cb(new Error("Solo se permiten imágenes JPEG, PNG o modelos GLTF/GLB"));
   },
-});
+}).single("file"); // Cambiado de "archivo" a "file" para coincidir con el frontend
 
 // Función auxiliar para parsear JSON de forma segura
 const parseJSONSafe = (data, defaultValue) => {
@@ -146,6 +146,8 @@ router.put("/:restaurantId/:itemId", authMiddleware, async (req, res) => {
       [name, price, description, category, imageUrl, itemId, restaurantId]
     );
 
+    console.log("[PUT Menu Item] Resultado de la actualización:", result);
+
     if (result.affectedRows === 0) {
       console.log("[PUT Menu Item] Ítem no encontrado:", { restaurantId, itemId });
       return res.status(404).json({ error: "Ítem no encontrado" });
@@ -160,7 +162,7 @@ router.put("/:restaurantId/:itemId", authMiddleware, async (req, res) => {
 });
 
 // Endpoint POST: Subir imagen (protegido)
-router.post("/:restaurantId/upload", authMiddleware, upload.single("archivo"), async (req, res) => {
+router.post("/:restaurantId/upload", authMiddleware, upload.single("file"), async (req, res) => {
   const restaurantId = parseInt(req.params.restaurantId, 10);
   const itemId = req.body.itemId ? parseInt(req.body.itemId, 10) : null;
   console.log("[POST Upload] Subiendo archivo para restaurante con ID:", restaurantId, "Item ID:", itemId);
@@ -170,16 +172,14 @@ router.post("/:restaurantId/upload", authMiddleware, upload.single("archivo"), a
     return res.status(400).json({ error: "No se proporcionó un archivo válido" });
   }
 
-  console.log("[POST Upload] Detalles del archivo:", {
+  console.log("[POST Upload] Archivo recibido:", {
     originalname: req.file.originalname,
     mimetype: req.file.mimetype,
     size: req.file.size,
-    buffer: req.file.buffer ? "Presente" : "Ausente",
     fieldname: req.file.fieldname,
   });
 
   try {
-    // Verificar configuración de Cloudinary
     console.log("[POST Upload] Configuración de Cloudinary:", {
       cloud_name: process.env.CLOUDINARY_CLOUD_NAME || "delzhsy0h",
       api_key: process.env.CLOUDINARY_API_KEY || "596323794257486",
@@ -200,10 +200,11 @@ router.post("/:restaurantId/upload", authMiddleware, upload.single("archivo"), a
     const fileUrl = result.secure_url;
     console.log("[POST Upload] Archivo subido a Cloudinary:", fileUrl);
 
-    // Si se proporciona un itemId, actualizar el ítem correspondiente en menu_items
     if (itemId) {
+      console.log("[POST Upload] Intentando actualizar image_url para itemId:", itemId);
       const query = "UPDATE menu_items SET image_url = ? WHERE id = ? AND restaurant_id = ?";
       const [resultDb] = await pool.query(query, [fileUrl, itemId, restaurantId]);
+      console.log("[POST Upload] Resultado de la actualización:", resultDb);
 
       if (resultDb.affectedRows === 0) {
         console.log("[POST Upload] Ítem no encontrado para restaurantId:", restaurantId, "itemId:", itemId);
