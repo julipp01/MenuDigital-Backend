@@ -106,8 +106,15 @@ router.get("/:restaurantId", authMiddleware, async (req, res) => {
       return res.status(404).json({ error: ERRORS.NOT_FOUND });
     }
 
-    logger.info("[GET Restaurante] Datos enviados", { restaurantId, data: restaurants[0] });
-    res.json(restaurants); // Devuelve array como en el frontend se espera
+    // Corregir logo_url inválido
+    const restaurantData = restaurants[0];
+    if (restaurantData.logo_url === "https://menudigital-backend-production.up.railway.app") {
+      restaurantData.logo_url = null;
+      logger.warn("[GET Restaurante] Logo_url inválido corregido a null", { restaurantId });
+    }
+
+    logger.info("[GET Restaurante] Datos enviados", { restaurantId, data: restaurantData });
+    res.json([restaurantData]); // Devuelve array como en el frontend se espera
   } catch (error) {
     logger.error("[GET Restaurante] Error", { error: error.message, restaurantId, ip: req.ip });
     res.status(500).json({ error: ERRORS.SERVER_ERROR, details: error.message });
