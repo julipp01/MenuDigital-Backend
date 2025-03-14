@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const pool = require("../config/db");
-const multer = require("multer"); // Aseguramos que multer esté importado
+const multer = require("multer");
 const path = require("path");
 const jwt = require("jsonwebtoken");
 const cloudinary = require("cloudinary").v2;
@@ -32,7 +32,7 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET || "w1Ti5eV3bW3COwAbXS1REaVm__k",
 });
 
-// Configuración de multer (aseguramos que sea una instancia válida)
+// Configuración de multer
 const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // Límite de 10MB
   fileFilter: (req, file, cb) => {
@@ -55,6 +55,31 @@ const parseJSONSafe = (data, defaultValue) => {
   } catch (error) {
     console.warn("[JSON Parser] Error al parsear JSON, usando valor por defecto:", error.message);
     return defaultValue;
+  }
+};
+
+// Middleware para verificar permisos del restaurante
+const checkRestaurantPermission = async (req, res, next) => {
+  const restaurantId = parseInt(req.params.restaurantId, 10);
+  try {
+    const [restaurants] = await pool.query("SELECT owner_id FROM restaurants WHERE id = ?", [restaurantId]);
+    if (!restaurants.length) {
+      console.log("[Permission] Restaurante no encontrado:", restaurantId);
+      return res.status(404).json({ error: "Restaurante no encontrado" });
+    }
+    const restaurant = restaurants[0];
+    if (restaurant.owner_id !== req.user.id) {
+      console.log("[Permission] Usuario no autorizado:", {
+        restaurantId,
+        userId: req.user.id,
+        ownerId: restaurant.owner_id,
+      });
+      return res.status(403).json({ error: "No autorizado para modificar este restaurante" });
+    }
+    next();
+  } catch (error) {
+    console.error("[Permission] Error al verificar permisos:", error.message);
+    return res.status(500).json({ error: "Error en el servidor" });
   }
 };
 
@@ -104,7 +129,7 @@ router.get("/:restaurantId", async (req, res) => {
 });
 
 // Endpoint POST: Agregar ítem al menú (protegido)
-router.post("/:restaurantId", authMiddleware, async (req, res) => {
+router.post("/:restaurantId", authMiddleware, checkRestaurantPermission, async (req, res) => {
   const restaurantId = parseInt(req.params.restaurantId, 10);
   const { name, price, description, category, imageUrl } = req.body;
 
@@ -128,7 +153,7 @@ router.post("/:restaurantId", authMiddleware, async (req, res) => {
 });
 
 // Endpoint PUT: Actualizar ítem del menú (protegido)
-router.put("/:restaurantId/:itemId", authMiddleware, async (req, res) => {
+router.put("/:restaurantId/:itemId", authMiddleware, checkRestaurantPermission, async (req, res) => {
   const restaurantId = parseInt(req.params.restaurantId, 10);
   const itemId = parseInt(req.params.itemId, 10);
   const { name, price, description, category, imageUrl } = req.body;
@@ -161,8 +186,36 @@ router.put("/:restaurantId/:itemId", authMiddleware, async (req, res) => {
   }
 });
 
+// Endpoint DELETE: Eliminar ítem del menú (protegido)
+router.delete("/:restaurantId/:itemId", authMiddleware, checkRestaurantPermission, async (req, res) => {
+  const restaurantId = parseInt(req.params.restaurantId, 10);
+  const itemId = parseInt(req.params.itemId, 10);
+
+  console.log("[DELETE Menu Item] Intentando eliminar ítem:", { restaurantId, itemId });
+
+  try {
+    const [result] = await pool.query(
+      "DELETE FROM menu_items WHERE id = ? AND restaurant_id = ?",
+      [itemId, restaurantId]
+    );
+
+    console.log("[DELETE Menu Item] Resultado de la eliminación:", result);
+
+    if (result.affectedRows === 0) {
+      console.log("[DELETE Menu Item] Ítem no encontrado:", { restaurantId, itemId });
+      return res.status(404).json({ error: "Ítem no encontrado" });
+    }
+
+    console.log("[DELETE Menu Item] Ítem eliminado con éxito:", { restaurantId, itemId });
+    res.json({ message: "Ítem eliminado con éxito" });
+  } catch (error) {
+    console.error("[DELETE Menu Item] Error:", error.message);
+    res.status(500).json({ error: "Error en el servidor", details: error.message });
+  }
+});
+
 // Endpoint POST: Subir imagen (protegido)
-router.post("/:restaurantId/upload", authMiddleware, upload.single("file"), async (req, res) => {
+router.post("/:restaurantId/upload", authMiddleware, checkRestaurantPermission, upload.single("file"), async (req, res) => {
   const restaurantId = parseInt(req.params.restaurantId, 10);
   const itemId = req.body.itemId ? parseInt(req.body.itemId, 10) : null;
   console.log("[POST Upload] Subiendo archivo para restaurante con ID:", restaurantId, "Item ID:", itemId);
