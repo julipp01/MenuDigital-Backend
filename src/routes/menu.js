@@ -31,6 +31,7 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET || "w1Ti5eV3bW3COwAbXS1REaVm__k",
 });
 
+// Configuración de multer
 const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // Límite de 10MB
   fileFilter: (req, file, cb) => {
@@ -42,7 +43,7 @@ const upload = multer({
     }
     cb(new Error("Solo se permiten imágenes JPEG, PNG o modelos GLTF/GLB"));
   },
-}).single("file");
+});
 
 // Función auxiliar para parsear JSON de forma segura
 const parseJSONSafe = (data, defaultValue) => {
@@ -61,7 +62,6 @@ router.get("/:restaurantId", async (req, res) => {
   const restaurantId = parseInt(req.params.restaurantId, 10);
   console.log("[GET Menu] Solicitando menú y datos del restaurante con ID:", restaurantId);
   try {
-    // Obtener datos del restaurante
     const restaurantQuery = `
       SELECT name, logo_url, colors, sections
       FROM restaurants
@@ -74,14 +74,12 @@ router.get("/:restaurantId", async (req, res) => {
     const restaurant = restaurants[0];
     console.log("[GET Menu] Datos crudos del restaurante:", restaurant);
 
-    // Parsear colors y sections de forma segura
     const defaultColors = { primary: "#FF9800", secondary: "#4CAF50" };
     const defaultSections = { "Platos Principales": [], "Postres": [], "Bebidas": [] };
     restaurant.colors = parseJSONSafe(restaurant.colors, defaultColors);
     restaurant.sections = parseJSONSafe(restaurant.sections, defaultSections);
     console.log("[GET Menu] Datos parseados del restaurante:", restaurant);
 
-    // Obtener ítems del menú
     const itemsQuery = `
       SELECT id, name, price, description, category, image_url
       FROM menu_items
@@ -109,7 +107,6 @@ router.post("/:restaurantId", authMiddleware, async (req, res) => {
   const restaurantId = parseInt(req.params.restaurantId, 10);
   const { name, price, description, category, imageUrl } = req.body;
 
-  // Validar datos de entrada
   if (!name || !price || !category) {
     console.log("[POST Menu] Faltan campos obligatorios");
     return res.status(400).json({ error: "Faltan campos obligatorios: nombre, precio o categoría" });
@@ -135,7 +132,6 @@ router.put("/:restaurantId/:itemId", authMiddleware, async (req, res) => {
   const itemId = parseInt(req.params.itemId, 10);
   const { name, price, description, category, imageUrl } = req.body;
 
-  // Validar datos de entrada
   if (!name || !price || !category) {
     console.log("[PUT Menu Item] Faltan campos obligatorios");
     return res.status(400).json({ error: "Faltan campos obligatorios: nombre, precio o categoría" });
