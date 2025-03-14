@@ -5,6 +5,7 @@ const multer = require("multer");
 const path = require("path");
 const jwt = require("jsonwebtoken");
 const cloudinary = require("cloudinary").v2;
+const sanitizeHtml = require("sanitize-html"); // Importar sanitize-html
 
 // Middleware de autenticación
 const authMiddleware = (req, res, next) => {
@@ -47,8 +48,8 @@ const upload = multer({
 
 // Función auxiliar para parsear JSON de forma segura
 const parseJSONSafe = (data, defaultValue) => {
-  if (!data || data === "[object Object]") return defaultValue; // Maneja NULL o formato inválido
-  if (typeof data === "object") return data; // Si ya es un objeto, no necesita parseo
+  if (!data || data === "[object Object]") return defaultValue;
+  if (typeof data === "object") return data;
   try {
     return JSON.parse(data);
   } catch (error) {
@@ -159,7 +160,7 @@ router.put("/:restaurantId/:itemId", authMiddleware, async (req, res) => {
 });
 
 // Endpoint POST: Subir imagen (protegido)
-router.post("/:restaurantId/upload", authMiddleware, upload.single("file"), async (req, res) => {
+router.post("/:restaurantId/upload", authMiddleware, upload.single("archivo"), async (req, res) => {
   const restaurantId = parseInt(req.params.restaurantId, 10);
   console.log("[POST Upload] Subiendo archivo para restaurante con ID:", restaurantId);
   if (!req.file) {
