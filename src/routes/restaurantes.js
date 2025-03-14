@@ -9,9 +9,8 @@ const compression = require("compression");
 const winston = require("winston");
 const sanitizeHtml = require("sanitize-html");
 const cloudinary = require("cloudinary").v2;
-const NodeCache = require("node-cache"); // Añadido para caché
+const NodeCache = require("node-cache");
 
-// Configuración del logger
 const logger = winston.createLogger({
   level: "info",
   format: winston.format.combine(winston.format.timestamp(), winston.format.json()),
@@ -22,7 +21,6 @@ const logger = winston.createLogger({
   ],
 });
 
-// Constantes de errores
 const ERRORS = {
   NO_TOKEN: "No se proporcionó token",
   INVALID_TOKEN: "Token inválido",
@@ -34,13 +32,9 @@ const ERRORS = {
   UNAUTHORIZED: "No autorizado para actualizar este restaurante",
 };
 
-// Caché en memoria para consultas frecuentes (TTL: 5 minutos)
 const cache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
-
-// Middleware de compresión
 router.use(compression());
 
-// Middleware de autenticación
 const authMiddleware = (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
   if (!token) {
@@ -58,7 +52,6 @@ const authMiddleware = (req, res, next) => {
   }
 };
 
-// Middleware de permisos (más estricto)
 const checkRestaurantPermission = async (req, res, next) => {
   const restaurantId = parseInt(req.params.restaurantId, 10);
   if (isNaN(restaurantId)) {
@@ -80,7 +73,6 @@ const checkRestaurantPermission = async (req, res, next) => {
       cache.set(cacheKey, restaurant);
     }
 
-    // Bloqueo estricto por owner_id (ajustable para roles futuros)
     if (restaurant.owner_id !== req.user.id) {
       logger.warn("[Permission] Usuario no autorizado", {
         restaurantId,
@@ -89,7 +81,7 @@ const checkRestaurantPermission = async (req, res, next) => {
       });
       return res.status(403).json({ error: ERRORS.UNAUTHORIZED });
     }
-    req.restaurant = restaurant; // Pasamos el restaurante al siguiente middleware
+    req.restaurant = restaurant;
     next();
   } catch (error) {
     logger.error("[Permission] Error al verificar permisos", { error: error.message, restaurantId, ip: req.ip });
@@ -97,7 +89,6 @@ const checkRestaurantPermission = async (req, res, next) => {
   }
 };
 
-// Esquema de validación para PUT
 const restaurantSchema = Joi.object({
   name: Joi.string().trim().max(255).allow(null, ""),
   colors: Joi.object().pattern(Joi.string(), Joi.string()).required(),
@@ -106,7 +97,6 @@ const restaurantSchema = Joi.object({
   plan_id: Joi.number().integer().allow(null),
 });
 
-// Middleware de validación
 const validateRestaurantUpdate = (req, res, next) => {
   const { error } = restaurantSchema.validate(req.body, { abortEarly: false });
   if (error) {
@@ -116,16 +106,14 @@ const validateRestaurantUpdate = (req, res, next) => {
   next();
 };
 
-// Configuración de Cloudinary
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME || "delzhsy0h",
   api_key: process.env.CLOUDINARY_API_KEY || "596323794257486",
   api_secret: process.env.CLOUDINARY_API_SECRET || "w1Ti5eV3bW3COwAbXS1REaVm__k",
 });
 
-// Configuración de Multer
 const upload = multer({
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const filetypes = /\.(jpe?g|png)$/i;
     const isValid = filetypes.test(path.extname(file.originalname)) || filetypes.test(file.mimetype);
@@ -135,7 +123,6 @@ const upload = multer({
   },
 }).single("logo");
 
-// GET: Obtener datos del restaurante (nuevo endpoint)
 router.get("/:restaurantId", authMiddleware, checkRestaurantPermission, async (req, res) => {
   const restaurantId = parseInt(req.params.restaurantId, 10);
   try {
@@ -152,21 +139,19 @@ router.get("/:restaurantId", authMiddleware, checkRestaurantPermission, async (r
         return res.status(404).json({ error: ERRORS.NOT_FOUND });
       }
       restaurantData = rows[0];
-      // Parsear JSON si está almacenado como texto
       restaurantData.colors = typeof restaurantData.colors === "string" ? JSON.parse(restaurantData.colors) : restaurantData.colors;
       restaurantData.sections = typeof restaurantData.sections === "string" ? JSON.parse(restaurantData.sections) : restaurantData.sections;
       cache.set(cacheKey, restaurantData);
     }
 
     logger.info("[GET Restaurante] Datos devueltos", { restaurantId, userId: req.user.id });
-    res.json([restaurantData]); // Devolvemos array para compatibilidad con el frontend
+    res.json([restaurantData]);
   } catch (error) {
     logger.error("[GET Restaurante] Error", { error: error.message, restaurantId, ip: req.ip });
     res.status(500).json({ error: ERRORS.SERVER_ERROR, details: error.message });
   }
 });
 
-// POST: Subir logo
 router.post("/:restaurantId/upload-logo", authMiddleware, checkRestaurantPermission, (req, res) => {
   const restaurantId = parseInt(req.params.restaurantId, 10);
 
@@ -190,7 +175,7 @@ router.post("/:restaurantId/upload-logo", authMiddleware, checkRestaurantPermiss
             resource_type: "image",
             folder: `restaurantes/${restaurantId}/logos`,
             public_id: `${Date.now()}-${sanitizeHtml(path.parse(req.file.originalname).name.replace(/\s+/g, "-"))}`,
-            overwrite: true, // Evita duplicados
+            overwrite: true,
           },
           (error, result) => (error ? reject(error) : resolve(result))
         ).end(req.file.buffer);
@@ -209,7 +194,6 @@ router.post("/:restaurantId/upload-logo", authMiddleware, checkRestaurantPermiss
         return res.status(404).json({ error: ERRORS.NOT_FOUND });
       }
 
-      // Invalidar caché
       cache.del([`restaurant_${restaurantId}`, `restaurant_full_${restaurantId}`]);
       logger.info("[POST Upload Logo] Logo actualizado", { restaurantId, logoUrl, userId: req.user.id });
       res.json({ logoUrl });
@@ -220,7 +204,6 @@ router.post("/:restaurantId/upload-logo", authMiddleware, checkRestaurantPermiss
   });
 });
 
-// PUT: Actualizar datos del restaurante
 router.put(
   "/:restaurantId",
   authMiddleware,
@@ -231,9 +214,20 @@ router.put(
     const { name, colors, logo, sections, plan_id } = req.body;
 
     try {
+      // Obtener el logo_url actual para evitar sobrescribir con null o datos desactualizados
+      const [currentData] = await pool.query("SELECT logo_url FROM restaurants WHERE id = ?", [restaurantId]);
+      const currentLogoUrl = currentData[0]?.logo_url || null;
+
       const [result] = await pool.query(
         "UPDATE restaurants SET name = ?, colors = ?, logo_url = ?, sections = ?, plan_id = ? WHERE id = ?",
-        [sanitizeHtml(name || ""), JSON.stringify(colors), logo || null, JSON.stringify(sections), plan_id || null, restaurantId]
+        [
+          sanitizeHtml(name || ""),
+          JSON.stringify(colors),
+          logo || currentLogoUrl, // Usar logo enviado o mantener el actual
+          JSON.stringify(sections),
+          plan_id || null,
+          restaurantId,
+        ]
       );
 
       if (result.affectedRows === 0) {
@@ -241,7 +235,6 @@ router.put(
         return res.status(404).json({ error: ERRORS.NOT_FOUND });
       }
 
-      // Invalidar caché
       cache.del([`restaurant_${restaurantId}`, `restaurant_full_${restaurantId}`]);
       logger.info("[PUT Restaurante] Restaurante actualizado", { restaurantId, userId: req.user.id });
       res.json({ message: "Restaurante actualizado con éxito" });
@@ -252,7 +245,6 @@ router.put(
   }
 );
 
-// POST: Crear restaurante (opcional, para soportar el fallback del frontend)
 router.post("/", authMiddleware, validateRestaurantUpdate, async (req, res) => {
   const { name, colors, logo, sections, plan_id } = req.body;
 
