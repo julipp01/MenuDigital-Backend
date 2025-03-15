@@ -16,7 +16,7 @@ const authMiddleware = (req, res, next) => {
   }
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || "secret_key");
-    console.log("[AUTH] Token decodificado:", decoded);
+    console.log("[AUTH] Token decodificado:", { id: decoded.id, email: decoded.email });
     req.user = decoded;
     next();
   } catch (err) {
@@ -38,10 +38,11 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     const filetypes = /jpeg|jpg|png|gltf|glb/;
     const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = filetypes.test(file.mimetype);
+    const mimetype = filetypes.test(file.mimetype) || file.mimetype === "model/gltf-binary";
     if (extname || mimetype) {
       return cb(null, true);
     }
+    console.log("[MULTER] Tipo de archivo no permitido:", file.mimetype, file.originalname);
     cb(new Error("Solo se permiten imágenes JPEG, PNG o modelos GLTF/GLB"));
   },
 });
@@ -61,6 +62,10 @@ const parseJSONSafe = (data, defaultValue) => {
 // Middleware para verificar permisos del restaurante
 const checkRestaurantPermission = async (req, res, next) => {
   const restaurantId = parseInt(req.params.restaurantId, 10);
+  if (isNaN(restaurantId)) {
+    console.log("[Permission] ID de restaurante inválido:", req.params.restaurantId);
+    return res.status(400).json({ error: "ID de restaurante inválido" });
+  }
   try {
     const [restaurants] = await pool.query("SELECT owner_id FROM restaurants WHERE id = ?", [restaurantId]);
     if (!restaurants.length) {
@@ -86,6 +91,10 @@ const checkRestaurantPermission = async (req, res, next) => {
 // Endpoint GET: Obtener menú y datos del restaurante (público)
 router.get("/:restaurantId", async (req, res) => {
   const restaurantId = parseInt(req.params.restaurantId, 10);
+  if (isNaN(restaurantId)) {
+    console.log("[GET Menu] ID de restaurante inválido:", req.params.restaurantId);
+    return res.status(400).json({ error: "ID de restaurante inválido" });
+  }
   console.log("[GET Menu] Solicitando menú y datos del restaurante con ID:", restaurantId);
   try {
     const restaurantQuery = `
@@ -134,7 +143,7 @@ router.post("/:restaurantId", authMiddleware, checkRestaurantPermission, async (
   const { name, price, description, category, imageUrl } = req.body;
 
   if (!name || !price || !category) {
-    console.log("[POST Menu] Faltan campos obligatorios");
+    console.log("[POST Menu] Faltan campos obligatorios:", { name, price, category });
     return res.status(400).json({ error: "Faltan campos obligatorios: nombre, precio o categoría" });
   }
 
@@ -159,7 +168,7 @@ router.put("/:restaurantId/:itemId", authMiddleware, checkRestaurantPermission, 
   const { name, price, description, category, imageUrl } = req.body;
 
   if (!name || !price || !category) {
-    console.log("[PUT Menu Item] Faltan campos obligatorios");
+    console.log("[PUT Menu Item] Faltan campos obligatorios:", { name, price, category });
     return res.status(400).json({ error: "Faltan campos obligatorios: nombre, precio o categoría" });
   }
 
@@ -170,8 +179,6 @@ router.put("/:restaurantId/:itemId", authMiddleware, checkRestaurantPermission, 
       "UPDATE menu_items SET name = ?, price = ?, description = ?, category = ?, image_url = ? WHERE id = ? AND restaurant_id = ?",
       [name, price, description, category, imageUrl, itemId, restaurantId]
     );
-
-    console.log("[PUT Menu Item] Resultado de la actualización:", result);
 
     if (result.affectedRows === 0) {
       console.log("[PUT Menu Item] Ítem no encontrado:", { restaurantId, itemId });
@@ -199,8 +206,6 @@ router.delete("/:restaurantId/:itemId", authMiddleware, checkRestaurantPermissio
       [itemId, restaurantId]
     );
 
-    console.log("[DELETE Menu Item] Resultado de la eliminación:", result);
-
     if (result.affectedRows === 0) {
       console.log("[DELETE Menu Item] Ítem no encontrado:", { restaurantId, itemId });
       return res.status(404).json({ error: "Ítem no encontrado" });
@@ -214,7 +219,7 @@ router.delete("/:restaurantId/:itemId", authMiddleware, checkRestaurantPermissio
   }
 });
 
-// Endpoint POST: Subir imagen (protegido)
+// Endpoint POST: Subir archivo (protegido)
 router.post("/:restaurantId/upload", authMiddleware, checkRestaurantPermission, upload.single("file"), async (req, res) => {
   const restaurantId = parseInt(req.params.restaurantId, 10);
   const itemId = req.body.itemId ? parseInt(req.body.itemId, 10) : null;
@@ -233,20 +238,35 @@ router.post("/:restaurantId/upload", authMiddleware, checkRestaurantPermission, 
   });
 
   try {
+    // Determinar el tipo de recurso y construir el public_id con la extensión
+    const isImage = req.file.mimetype.includes("image");
+    const resourceType = isImage ? "image" : "raw";
+    const fileExtension = path.extname(req.file.originalname).toLowerCase(); // Ejemplo: ".glb"
+    const fileBaseName = sanitizeHtml(path.parse(req.file.originalname).name.replace(/\s+/g, "-")); // Nombre sin extensión
+    const publicId = `${Date.now()}-${fileBaseName}${fileExtension}`; // Ejemplo: "1742000588269-modelo.glb"
+
     console.log("[POST Upload] Configuración de Cloudinary:", {
-      cloud_name: process.env.CLOUDINARY_CLOUD_NAME || "delzhsy0h",
-      api_key: process.env.CLOUDINARY_API_KEY || "596323794257486",
-      api_secret: process.env.CLOUDINARY_API_SECRET ? "[REDACTED]" : "Ausente",
+      cloud_name: cloudinary.config().cloud_name,
+      api_key: cloudinary.config().api_key,
+      api_secret: cloudinary.config().api_secret ? "[REDACTED]" : "Ausente",
     });
+    console.log("[POST Upload] Subiendo archivo con public_id:", publicId, "resource_type:", resourceType);
 
     const result = await new Promise((resolve, reject) => {
       cloudinary.uploader.upload_stream(
         {
-          resource_type: req.file.mimetype.includes("image") ? "image" : "raw",
+          resource_type: resourceType,
           folder: `restaurantes/${restaurantId}/menu`,
-          public_id: `${Date.now()}-${sanitizeHtml(path.parse(req.file.originalname).name.replace(/\s+/g, "-"))}`,
+          public_id: publicId,
         },
-        (error, result) => (error ? reject(error) : resolve(result))
+        (error, result) => {
+          if (error) {
+            console.error("[POST Upload] Error en Cloudinary:", error);
+            reject(error);
+          } else {
+            resolve(result);
+          }
+        }
       ).end(req.file.buffer);
     });
 
@@ -274,7 +294,6 @@ router.post("/:restaurantId/upload", authMiddleware, checkRestaurantPermission, 
       message: error.message,
       code: error.http_code,
       stack: error.stack,
-      details: error.details,
     });
     res.status(500).json({ error: "Error al subir el archivo", details: error.message });
   }
