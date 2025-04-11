@@ -1,5 +1,5 @@
 const pool = require("../config/db");
-const bcrypt = require("bcrypt"); // Asegúrate de instalar bcrypt: `npm install bcrypt`
+const bcrypt = require("bcryptjs"); // Asegúrate de instalar bcryptjs: `npm install bcryptjs`
 
 console.log("✅ [userController] Controlador de usuario cargado.");
 
