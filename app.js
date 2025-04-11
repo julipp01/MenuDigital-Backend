@@ -92,7 +92,7 @@ app.use("/api", router);
 // Root route
 app.get("/", (req, res) => {
   const response = {
-    message: "API funcionando 🚀",
+    message: "API corriendo como cañom 🚀",
     environment: process.env.NODE_ENV,
     backendUrl: process.env.BACKEND_URL,
     timestamp: new Date().toISOString(),
