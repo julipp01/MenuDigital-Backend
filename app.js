@@ -30,11 +30,12 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      logger.info("Request origin:", { origin });
+      logger.info("CORS check", { origin, allowedOrigins });
       if (!origin || allowedOrigins.includes(origin) || !isProduction) {
+        logger.info("CORS allowed", { origin });
         return callback(null, true);
       }
-      logger.warn("CORS blocked for:", { origin });
+      logger.warn("CORS blocked", { origin });
       return callback(new Error("Acceso no permitido por CORS"));
     },
     credentials: true,
@@ -43,6 +44,7 @@ app.use(
   })
 );
 
+// Manejar solicitudes OPTIONS explícitamente
 app.options("*", cors());
 
 // Middlewares
