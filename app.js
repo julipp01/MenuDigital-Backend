@@ -2,6 +2,8 @@ const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
 const winston = require("winston");
+const { createServer } = require("http");
+const { initializeSocket } = require("./config/socket");
 require("dotenv").config();
 
 const app = express();
@@ -22,8 +24,6 @@ const logger = winston.createLogger({
 const allowedOrigins = [
   "http://localhost:5173",
   "http://192.168.18.22:5173",
-  "https://menu-digital-bdhg.vercel.app",
-  "https://menudigital-18byivk2a-julipp01s-projects.vercel.app",
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 
@@ -74,7 +74,6 @@ router.use("/auth", require("./routes/authRoutes"));
 router.use("/restaurantes", require("./routes/restaurantes"));
 router.use("/dashboard", require("./routes/dashboard"));
 router.use("/mesas", require("./routes/mesas"));
-// Redirigir /api/templates a /api/restaurantes/menu_templates
 router.use("/templates", (req, res, next) => {
   logger.info("[Redirect] Redirigiendo /api/templates a /api/restaurantes/menu_templates", { ip: req.ip });
   res.redirect(307, `/api/restaurantes/menu_templates${req.url}`);
@@ -86,7 +85,6 @@ router.use("/admin/subscription_plans", require("./routes/adminPlans"));
 router.use("/admin/subscriptions", require("./routes/adminSubscriptions"));
 router.use("/modules-config", require("./routes/modules"));
 
-// Usar el prefijo /api para todas las rutas
 app.use("/api", router);
 
 // Root route
@@ -118,14 +116,19 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server
+// Crear servidor HTTP y vincular WebSocket
+const server = createServer(app);
+initializeSocket(server);
+
+// Iniciar servidor
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+server.listen(PORT, "0.0.0.0", () => {
   logger.info(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
+  console.log(`🚀 Servidor corriendo en ${process.env.BACKEND_URL || "http://localhost:" + PORT}`);
+  console.log(`🚀 WebSocket disponible en ${process.env.SOCKET_URL || "ws://localhost:" + PORT}`);
 });
 
 module.exports = app;
-
 
 
 
