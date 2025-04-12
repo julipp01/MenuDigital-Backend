@@ -122,6 +122,7 @@ initializeSocket(server);
 
 // Iniciar servidor
 const PORT = process.env.PORT || 5000;
+console.log(`Assigned PORT: ${process.env.PORT || "Not defined, using 5000"}`);
 server.listen(PORT, "0.0.0.0", () => {
   logger.info(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
   console.log(`🚀 Servidor corriendo en ${process.env.BACKEND_URL || "http://localhost:" + PORT}`);
