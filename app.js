@@ -24,7 +24,8 @@ const logger = winston.createLogger({
 const allowedOrigins = [
   "http://localhost:5173",
   "http://192.168.18.22:5173",
-  process.env.FRONTEND_URL, // Producción: Vercel
+  "https://menu-digital-bdhg.vercel.app", // Agregado explícitamente
+  process.env.FRONTEND_URL, // Producción: Vercel (asegúrate de que esta variable esté correctamente configurada)
 ].filter(Boolean);
 
 logger.info("Allowed origins configurados:", { allowedOrigins });
