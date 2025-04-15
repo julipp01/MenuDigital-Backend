@@ -24,8 +24,10 @@ const logger = winston.createLogger({
 const allowedOrigins = [
   "http://localhost:5173",
   "http://192.168.18.22:5173",
-  process.env.FRONTEND_URL,
+  process.env.FRONTEND_URL, // Producción: Vercel
 ].filter(Boolean);
+
+logger.info("Allowed origins configurados:", { allowedOrigins });
 
 app.use(
   cors({
@@ -45,7 +47,16 @@ app.use(
 );
 
 // Manejar solicitudes OPTIONS explícitamente
-app.options("*", cors());
+app.options("*", (req, res) => {
+  logger.info("Handling OPTIONS request", { path: req.path, origin: req.get("origin") });
+  res.set({
+    "Access-Control-Allow-Origin": allowedOrigins.includes(req.get("origin")) ? req.get("origin") : "*",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Credentials": "true",
+  });
+  res.status(200).end();
+});
 
 // Middlewares
 app.use(express.json({ limit: "10mb" }));
@@ -91,14 +102,13 @@ app.use("/api", router);
 
 // Root route
 app.get("/", (req, res) => {
-  const response = {
-    message: "API corriendo como cañom 🚀",
-    environment: process.env.NODE_ENV,
+  logger.info("Root route accessed", { ip: req.ip, origin: req.get("origin") });
+  res.status(200).json({
+    mensaje: "API funcionando como un cañón 🚀",
+    entorno: process.env.NODE_ENV,
     backendUrl: process.env.BACKEND_URL,
-    timestamp: new Date().toISOString(),
-  };
-  logger.info("[GET /] Root route accessed", { ip: req.ip });
-  res.status(200).json(response);
+    marca_de_tiempo: new Date().toISOString(),
+  });
 });
 
 // Error handling middleware
@@ -124,7 +134,7 @@ initializeSocket(server);
 
 // Iniciar servidor
 const PORT = process.env.PORT || 5000;
-console.log(`Assigned PORT: ${process.env.PORT || "Not defined, using 5000"}`);
+logger.info("Starting server", { port: PORT, nodeEnv: process.env.NODE_ENV });
 server.listen(PORT, "0.0.0.0", () => {
   logger.info(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
   console.log(`🚀 Servidor corriendo en ${process.env.BACKEND_URL || "http://localhost:" + PORT}`);
